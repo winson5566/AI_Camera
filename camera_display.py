@@ -175,17 +175,28 @@ try:
             if captured_image:
                 disp.ShowImage(captured_image)
 
+
         elif mode == MODE_GALLERY:
+
             if gallery_files:
+                # 打开图片并调整大小
                 img_path = gallery_files[gallery_index]
-                img = Image.open(img_path).resize((240, 240))
-                draw = ImageDraw.Draw(img)
+                base_img = Image.open(img_path).resize((240, 240))
+
+                # 创建新的画布，在上面绘制索引
+                draw = ImageDraw.Draw(base_img)
                 font = ImageFont.truetype(FONT_PATH, 16)
-                # 显示 (当前/总数)
-                index_text = f"({gallery_index+1}/{len(gallery_files)})"
+
+                # 在未旋转的原始方向绘制 (当前/总数)
+                index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-                disp.ShowImage(img)
+
+                # 最后整体旋转 270 度
+                final_img = base_img.rotate(270)
+
+                # 显示到屏幕
+                disp.ShowImage(final_img)
 
         elif mode == MODE_DELETE_CONFIRM:
             # 删除确认界面
