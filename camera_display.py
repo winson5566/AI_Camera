@@ -185,6 +185,8 @@ try:
                 index_text = f"({gallery_index+1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
+                # **旋转 270 度再显示**
+                disp.ShowImage(img.rotate(270))
                 disp.ShowImage(img)
 
         elif mode == MODE_DELETE_CONFIRM:
@@ -192,11 +194,11 @@ try:
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
             draw = ImageDraw.Draw(confirm_img)
             font = ImageFont.truetype(FONT_PATH, 20)
-            options = ["确认删除", "取消"]
+            options = ["DELETE", "CANCEL"]
             for i, opt in enumerate(options):
                 color = (255, 0, 0) if i == delete_selection else (255, 255, 255)
                 draw.text((80, 100 + i * 40), opt, font=font, fill=color)
-            disp.ShowImage(confirm_img)
+            disp.ShowImage(confirm_img.rotate(270))
 
         # ---------- 按键检测 ----------
         center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
