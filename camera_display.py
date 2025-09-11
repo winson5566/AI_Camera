@@ -7,6 +7,7 @@ import ST7789
 from picamera2 import Picamera2
 import json
 import os
+import textwrap
 from datetime import datetime
 
 try:
@@ -153,23 +154,24 @@ logging.info("Picamera2 初始化完成")
 MODE_PREVIEW = 0
 MODE_RESULT = 1
 MODE_GALLERY = 2
+MODE_DELETE_CONFIRM = 3  # 删除确认模式
 
 mode = MODE_PREVIEW
 captured_image = None
 gallery_index = 0
 gallery_files = []
+delete_selection = 0  # 0=确认删除，1=取消
 
 # ---------- 主循环 ----------
 try:
     while True:
+        # ---------- 不同模式的显示 ----------
         if mode == MODE_PREVIEW:
-            # 实时预览
             frame = picam2.capture_array()
             img_pil = Image.fromarray(frame).rotate(270)
             disp.ShowImage(img_pil)
 
         elif mode == MODE_RESULT:
-            # 显示拍照结果
             if captured_image:
                 disp.ShowImage(captured_image)
 
@@ -177,39 +179,53 @@ try:
             if gallery_files:
                 img_path = gallery_files[gallery_index]
                 img = Image.open(img_path).resize((240, 240))
+                draw = ImageDraw.Draw(img)
+                font = ImageFont.truetype(FONT_PATH, 16)
+                # 显示 (当前/总数)
+                index_text = f"({gallery_index+1}/{len(gallery_files)})"
+                draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
+                draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
                 disp.ShowImage(img)
 
-        # ---------- 按键检测 ----------
-        center_pressed = (
-            disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or
-            disp.digital_read(disp.GPIO_KEY1_PIN) == 1
-        )
-        key_gallery = disp.digital_read(disp.GPIO_KEY2_PIN) == 1
-        key_exit_gallery = disp.digital_read(disp.GPIO_KEY3_PIN) == 1
+        elif mode == MODE_DELETE_CONFIRM:
+            # 删除确认界面
+            confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
+            draw = ImageDraw.Draw(confirm_img)
+            font = ImageFont.truetype(FONT_PATH, 20)
+            options = ["确认删除", "取消"]
+            for i, opt in enumerate(options):
+                color = (255, 0, 0) if i == delete_selection else (255, 255, 255)
+                draw.text((80, 100 + i * 40), opt, font=font, fill=color)
+            disp.ShowImage(confirm_img)
 
+        # ---------- 按键检测 ----------
+        center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
+        key_gallery = disp.digital_read(disp.GPIO_KEY2_PIN) == 1
+        key_delete = disp.digital_read(disp.GPIO_KEY3_PIN) == 1
         key_up = disp.digital_read(disp.GPIO_KEY_UP_PIN) == 1
         key_down = disp.digital_read(disp.GPIO_KEY_DOWN_PIN) == 1
         key_left = disp.digital_read(disp.GPIO_KEY_LEFT_PIN) == 1
         key_right = disp.digital_read(disp.GPIO_KEY_RIGHT_PIN) == 1
 
-        # ====== 从预览进入拍照推理 ======
+        # ====== 拍照推理 ======
         if center_pressed and mode == MODE_PREVIEW:
             time.sleep(0.2)
             infer_ms, cls, score = run_inference(img_pil)
             pred_name = idx_to_name.get(cls, f"Class {cls}")
 
-            # 显示推理结果
+            # 自动换行识别结果
+            text = f"{pred_name} ({score * 100:.1f}%)"
+            wrapped = textwrap.wrap(text, width=18)[:2]  # 每行最多18字符，两行
+
             img_draw = img_pil.rotate(-270)
             draw = ImageDraw.Draw(img_draw)
             font = ImageFont.truetype(FONT_PATH, 18)
-            text = f"{pred_name} ({score * 100:.1f}%)"
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
-            draw.text((10, 210), text, font=font, fill=(255, 255, 255))
+            for i, line in enumerate(wrapped):
+                draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
             img_final = img_draw.rotate(270)
 
-            # 保存图片
             save_history_image(img_final)
-
             captured_image = img_final.copy()
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
@@ -224,29 +240,44 @@ try:
             time.sleep(0.2)
             gallery_files = load_history_images()
             if gallery_files:
-                gallery_index = len(gallery_files) - 1  # 默认显示最新一张
+                gallery_index = len(gallery_files) - 1
                 mode = MODE_GALLERY
                 logging.info("进入相册模式")
 
-        # ====== 相册中切换图片 ======
+        # ====== 相册浏览 ======
         elif mode == MODE_GALLERY:
             if key_up or key_left:
                 time.sleep(0.2)
-                if gallery_files:
-                    gallery_index = (gallery_index - 1) % len(gallery_files)
-                    logging.info(f"上一张: {gallery_index + 1}/{len(gallery_files)}")
-
+                gallery_index = (gallery_index - 1) % len(gallery_files)
             elif key_down or key_right:
                 time.sleep(0.2)
-                if gallery_files:
-                    gallery_index = (gallery_index + 1) % len(gallery_files)
-                    logging.info(f"下一张: {gallery_index + 1}/{len(gallery_files)}")
-
-            # ====== 退出相册 ======
-            if key_exit_gallery or center_pressed:
+                gallery_index = (gallery_index + 1) % len(gallery_files)
+            elif key_delete:
+                time.sleep(0.2)
+                mode = MODE_DELETE_CONFIRM
+                delete_selection = 0
+            elif center_pressed:
                 time.sleep(0.2)
                 mode = MODE_PREVIEW
-                logging.info("退出相册模式")
+
+        # ====== 删除确认处理 ======
+        elif mode == MODE_DELETE_CONFIRM:
+            if key_up or key_down:
+                delete_selection = 1 - delete_selection  # 切换选择
+                time.sleep(0.2)
+            elif center_pressed:
+                if delete_selection == 0:  # 确认删除
+                    os.remove(gallery_files[gallery_index])
+                    del gallery_files[gallery_index]
+                    if gallery_files:
+                        gallery_index %= len(gallery_files)
+                        mode = MODE_GALLERY
+                    else:
+                        mode = MODE_PREVIEW
+                    logging.info("图片已删除")
+                else:  # 取消
+                    mode = MODE_GALLERY
+                time.sleep(0.2)
 
 except KeyboardInterrupt:
     logging.info("用户手动退出程序")
