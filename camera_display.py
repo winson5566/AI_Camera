@@ -20,7 +20,7 @@ picam2 = Picamera2()
 
 # 配置摄像头输出 240x240 分辨率
 config = picam2.create_preview_configuration(
-    main={"size": (240, 240), "format": "RGB888"}
+    main={"size": (240, 240), "format": "BGR888"}  # 直接输出 BGR
 )
 picam2.configure(config)
 picam2.start()
