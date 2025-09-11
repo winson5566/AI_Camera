@@ -1,58 +1,49 @@
 # -*- coding:utf-8 -*-
-import cv2
 import time
 import logging
 import numpy as np
 from PIL import Image
-
 import ST7789  # 屏幕驱动
+from picamera2 import Picamera2  # 官方新标准库
 
 logging.basicConfig(level=logging.INFO)
 
-# 初始化 ST7789 屏幕
+# ---------- 初始化 ST7789 ----------
 disp = ST7789.ST7789()
 disp.Init()
 disp.clear()
-disp.bl_DutyCycle(50)  # 设置背光亮度为 50%
-
+disp.bl_DutyCycle(80)  # 背光亮度 80%
 logging.info("ST7789 初始化完成")
 
-# 打开树莓派摄像头（官方摄像头3）
-camera = cv2.VideoCapture(0)  # 0 表示第一个摄像头设备
-if not camera.isOpened():
-    raise RuntimeError("无法打开树莓派摄像头")
+# ---------- 初始化 Picamera2 ----------
+picam2 = Picamera2()
 
-# 设置摄像头分辨率为 240x240
-camera.set(cv2.CAP_PROP_FRAME_WIDTH, 240)
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+# 配置摄像头输出 240x240 分辨率
+config = picam2.create_preview_configuration(
+    main={"size": (240, 240), "format": "RGB888"}
+)
+picam2.configure(config)
+picam2.start()
+logging.info("Picamera2 摄像头初始化完成")
 
-logging.info("摄像头初始化完成")
-
-# 状态标志：True = 预览模式，False = 显示拍摄照片
+# ---------- 模式状态 ----------
 preview_mode = True
 captured_image = None
 
 try:
     while True:
         if preview_mode:
-            # 读取摄像头帧
-            ret, frame = camera.read()
-            if not ret:
-                logging.warning("未获取到摄像头画面")
-                continue
+            # 直接获取 numpy 数组图像（RGB888 格式）
+            frame_rgb = picam2.capture_array()
 
-            # OpenCV 默认是 BGR，需要转换成 RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # 转换为 PIL Image 并旋转
+            # 转换为 PIL 图像并旋转
             img_pil = Image.fromarray(frame_rgb)
-            img_pil = img_pil.rotate(270)  # 旋转 270 度适配屏幕
+            img_pil = img_pil.rotate(270)
 
-            # 显示实时画面
+            # 显示实时画面到 ST7789
             disp.ShowImage(img_pil)
 
         else:
-            # 显示拍摄的静止照片
             if captured_image:
                 disp.ShowImage(captured_image)
 
@@ -60,15 +51,13 @@ try:
         center_pressed = (disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1)
         if center_pressed:
             logging.info("Center 按键按下")
-            time.sleep(0.2)  # 防抖延时
+            time.sleep(0.2)  # 按键防抖
 
             if preview_mode:
-                # 拍照：将当前帧保存为 captured_image
                 captured_image = img_pil.copy()
                 preview_mode = False
                 logging.info("已拍照，进入照片显示模式")
             else:
-                # 返回实时预览模式
                 preview_mode = True
                 logging.info("返回实时预览模式")
 
@@ -76,7 +65,7 @@ except KeyboardInterrupt:
     logging.info("用户手动退出程序")
 
 finally:
-    camera.release()
+    picam2.stop()
     disp.clear()
     disp.module_exit()
     logging.info("程序已退出，资源释放完成")
