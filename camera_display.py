@@ -185,8 +185,7 @@ try:
                 index_text = f"({gallery_index+1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-                # **旋转 270 度再显示**
-                disp.ShowImage(img.rotate(270))
+                disp.ShowImage(img)
 
         elif mode == MODE_DELETE_CONFIRM:
             # 删除确认界面
