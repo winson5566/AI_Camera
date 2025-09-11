@@ -3,79 +3,80 @@ import cv2
 import time
 import logging
 import numpy as np
-import ST7789
 from PIL import Image
 
-# ========== 1. 初始化日志 ==========
+import ST7789  # 屏幕驱动
+
 logging.basicConfig(level=logging.INFO)
 
-# ========== 2. 初始化屏幕 ==========
-disp = ST7789.ST7789()       # 创建 ST7789 屏幕对象
-disp.Init()                  # 初始化显示屏
-disp.clear()                 # 清屏
-disp.bl_DutyCycle(80)        # 设置背光亮度 80%
+# 初始化 ST7789 屏幕
+disp = ST7789.ST7789()
+disp.Init()
+disp.clear()
+disp.bl_DutyCycle(50)  # 设置背光亮度为 50%
 
-# ========== 3. 初始化摄像头 ==========
-camera = cv2.VideoCapture(0)
+logging.info("ST7789 初始化完成")
+
+# 打开树莓派摄像头（官方摄像头3）
+camera = cv2.VideoCapture(0)  # 0 表示第一个摄像头设备
 if not camera.isOpened():
-    logging.error("无法打开摄像头")
-    exit()
+    raise RuntimeError("无法打开树莓派摄像头")
 
-CAM_WIDTH, CAM_HEIGHT = 320, 240
-camera.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_WIDTH)
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
-logging.info("摄像头初始化完成，分辨率: %dx%d", CAM_WIDTH, CAM_HEIGHT)
+# 设置摄像头分辨率为 240x240
+camera.set(cv2.CAP_PROP_FRAME_WIDTH, 240)
+camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
 
-# ========== 4. 模式控制 ==========
-MODE_PREVIEW = 0   # 实时预览模式
-MODE_CAPTURED = 1  # 拍照显示模式
-mode = MODE_PREVIEW
+logging.info("摄像头初始化完成")
 
+# 状态标志：True = 预览模式，False = 显示拍摄照片
+preview_mode = True
 captured_image = None
-
-logging.info("进入主循环，按 Center 键拍照/返回")
 
 try:
     while True:
-        if mode == MODE_PREVIEW:
+        if preview_mode:
+            # 读取摄像头帧
             ret, frame = camera.read()
             if not ret:
-                logging.error("无法读取摄像头画面")
+                logging.warning("未获取到摄像头画面")
                 continue
 
-            # 将 BGR 转为 RGB
+            # OpenCV 默认是 BGR，需要转换成 RGB
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # 缩放到 ST7789 分辨率
-            frame_rgb = cv2.resize(frame_rgb, (disp.width, disp.height))
 
-            # 转换为 PIL 图像
-            image_pil = Image.fromarray(frame_rgb)
-            image_pil = image_pil.rotate(270)  # 根据实际情况调整
+            # 转换为 PIL Image 并旋转
+            img_pil = Image.fromarray(frame_rgb)
+            img_pil = img_pil.rotate(270)  # 旋转 270 度适配屏幕
 
-            # 显示到屏幕
-            disp.ShowImage(image_pil)
+            # 显示实时画面
+            disp.ShowImage(img_pil)
 
-            # 检测 Center 按键
-            if disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1:  # 1 表示按下
-                logging.info("检测到 Center 按键，拍照中...")
-                captured_image = image_pil.copy()
-                mode = MODE_CAPTURED
-                time.sleep(0.3)  # 按键防抖
-
-        elif mode == MODE_CAPTURED:
+        else:
+            # 显示拍摄的静止照片
             if captured_image:
                 disp.ShowImage(captured_image)
 
-            # 再次按下 Center 键返回实时预览
-            if disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1:
+        # 检测 Center 按键
+        center_pressed = (disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1)
+        if center_pressed:
+            logging.info("Center 按键按下")
+            time.sleep(0.2)  # 防抖延时
+
+            if preview_mode:
+                # 拍照：将当前帧保存为 captured_image
+                captured_image = img_pil.copy()
+                preview_mode = False
+                logging.info("已拍照，进入照片显示模式")
+            else:
+                # 返回实时预览模式
+                preview_mode = True
                 logging.info("返回实时预览模式")
-                mode = MODE_PREVIEW
-                time.sleep(0.3)
 
 except KeyboardInterrupt:
-    logging.info("退出程序")
+    logging.info("用户手动退出程序")
+
 finally:
     camera.release()
     disp.clear()
     disp.module_exit()
-    logging.info("资源清理完成，程序结束")
+    logging.info("程序已退出，资源释放完成")
