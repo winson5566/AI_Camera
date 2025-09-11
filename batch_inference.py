@@ -146,7 +146,6 @@ def main():
         print("[ERROR] No test images found in 'test/' directory.")
         return
 
-    random.shuffle(img_paths)
     print(f"[INFO] Found {len(img_paths)} test images, running inference...\n")
 
     # 4. 遍历推理
