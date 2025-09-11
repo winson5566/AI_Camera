@@ -158,12 +158,18 @@ try:
                 infer_ms, cls, score = run_inference(img_pil)
                 pred_name = idx_to_name.get(cls, f"Class {cls}")
 
-                # 在图片上绘制推理结果
-                draw = ImageDraw.Draw(img_pil)
+                # 先旋转回原始方向绘制文字
+                img_draw = img_pil.rotate(-270)  # 或 rotate(90)
+                draw = ImageDraw.Draw(img_draw)
                 font = ImageFont.truetype(FONT_PATH, 18)
-                text = f"{pred_name} ({score*100:.1f}%)"
-                draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))  # 底部黑条
+                text = f"{pred_name} ({score * 100:.1f}%)"
+
+                # 在底部绘制黑条和文字
+                draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
                 draw.text((10, 210), text, font=font, fill=(255, 255, 255))
+
+                # 再旋转回来
+                img_pil = img_draw.rotate(270)
 
                 captured_image = img_pil.copy()
                 preview_mode = False
