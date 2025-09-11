@@ -118,7 +118,7 @@ def run_inference(img_pil):
     return infer_ms, cls, score
 
 def save_history_image(img_pil):
-    """保存图片到history文件夹"""
+    """保存图片到history文件夹 (保持原始未旋转方向)"""
     os.makedirs(HISTORY_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}.jpg"
@@ -169,8 +169,8 @@ try:
         if mode == MODE_PREVIEW:
             # 实时预览：摄像头图像直接旋转后显示
             frame = picam2.capture_array()
-            img_pil = Image.fromarray(frame)
-            disp.ShowImage(img_pil.rotate(270))
+            img_pil = Image.fromarray(frame)  # 原始图像不旋转
+            disp.ShowImage(img_pil.rotate(270))  # 显示时旋转
 
         elif mode == MODE_RESULT:
             if captured_image:
@@ -181,14 +181,14 @@ try:
                 img_path = gallery_files[gallery_index]
                 base_img = Image.open(img_path).resize((240, 240))
 
-                # 在原图上绘制索引
+                # 在原图上绘制索引 (未旋转)
                 draw = ImageDraw.Draw(base_img)
                 font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
 
-                # 统一旋转后显示
+                # 显示时统一旋转
                 disp.ShowImage(base_img.rotate(270))
 
         elif mode == MODE_DELETE_CONFIRM:
@@ -221,17 +221,18 @@ try:
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]  # 每行最多18字符，两行
 
-            # 在原图上绘制识别结果
+            # 在原始方向的图像上绘制推理结果
             draw = ImageDraw.Draw(img_pil)
             font = ImageFont.truetype(FONT_PATH, 18)
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
 
-            # 最后统一旋转后显示
-            img_final = img_pil.rotate(270)
-            save_history_image(img_final)
-            captured_image = img_final.copy()
+            # 保存未旋转原图
+            save_history_image(img_pil)
+
+            # 显示时旋转
+            captured_image = img_pil.rotate(270)
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
