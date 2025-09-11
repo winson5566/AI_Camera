@@ -5,7 +5,11 @@ import random
 import glob
 import numpy as np
 from PIL import Image
-from tensorflow.lite.python.interpreter import Interpreter
+# 适配树莓派：优先使用 tflite-runtime
+try:
+    from tflite_runtime.interpreter import Interpreter
+except ImportError:
+    from tensorflow.lite.python.interpreter import Interpreter
 
 # ----------------- 配置 -----------------
 MODEL_PATH = "model/model_efficientnet_b0_inat2021_drq.tflite"
