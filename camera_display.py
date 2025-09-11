@@ -22,6 +22,11 @@ HISTORY_DIR = "/home/winson/AI_Camera/history"  # 历史照片存储路径
 TOP_K = 1
 CENTER_CROP = True
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# 休眠超时时间（秒）
+SLEEP_TIMEOUT = 60
+DEFAULT_BRIGHTNESS = 50  # 正常工作时背光亮度 (0-100)
+
 # ---------------------------------------
 
 logging.basicConfig(level=logging.INFO)
@@ -138,7 +143,7 @@ def load_history_images():
 disp = ST7789.ST7789()
 disp.Init()
 disp.clear()
-disp.bl_DutyCycle(100)
+disp.bl_DutyCycle(DEFAULT_BRIGHTNESS)
 logging.info("ST7789 初始化完成")
 
 # ---------- 初始化摄像头 ----------
@@ -154,23 +159,78 @@ logging.info("Picamera2 初始化完成")
 MODE_PREVIEW = 0
 MODE_RESULT = 1
 MODE_GALLERY = 2
-MODE_DELETE_CONFIRM = 3  # 删除确认模式
+MODE_DELETE_CONFIRM = 3
+MODE_SLEEP = 4  # 新增休眠模式
 
 mode = MODE_PREVIEW
 captured_image = None
 gallery_index = 0
 gallery_files = []
-delete_selection = 0  # 0=确认删除，1=取消
+delete_selection = 0
+sleeping = False  # 是否处于休眠状态
+
+# 上次按键时间
+last_active = time.time()
+
+# ---------- 按键检测函数 ----------
+def check_any_key():
+    """检测是否有任意按键被按下"""
+    return (
+        disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY1_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY2_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY3_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY_UP_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY_DOWN_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY_LEFT_PIN) == 1 or
+        disp.digital_read(disp.GPIO_KEY_RIGHT_PIN) == 1
+    )
+
+# ---------- 进入休眠 ----------
+def enter_sleep():
+    global sleeping, mode
+    picam2.stop()
+    disp.bl_DutyCycle(0)  # 关闭背光
+    sleeping = True
+    mode = MODE_SLEEP
+    logging.info("进入休眠模式")
+
+# ---------- 唤醒 ----------
+def wake_up():
+    global sleeping, mode
+    picam2.start()
+    disp.bl_DutyCycle(DEFAULT_BRIGHTNESS)
+    sleeping = False
+    mode = MODE_PREVIEW
+    logging.info("唤醒设备")
 
 # ---------- 主循环 ----------
 try:
     while True:
+        now = time.time()
+
+        # 检测是否有按键输入
+        if check_any_key():
+            last_active = now
+            if sleeping:
+                wake_up()
+                time.sleep(0.3)  # 防止误触发
+                continue
+
+        # 超时进入休眠
+        if not sleeping and (now - last_active > SLEEP_TIMEOUT):
+            enter_sleep()
+
+        # 如果处于休眠状态，则跳过其他逻辑
+        if sleeping:
+            time.sleep(0.2)
+            continue
+
         # ---------- 不同模式的显示 ----------
         if mode == MODE_PREVIEW:
-            # 实时预览：摄像头图像直接旋转后显示
             frame = picam2.capture_array()
-            img_pil = Image.fromarray(frame)  # 原始图像不旋转
-            disp.ShowImage(img_pil.rotate(270))  # 显示时旋转
+            img_pil = Image.fromarray(frame)
+            disp.ShowImage(img_pil.rotate(270))
 
         elif mode == MODE_RESULT:
             if captured_image:
@@ -180,19 +240,14 @@ try:
             if gallery_files:
                 img_path = gallery_files[gallery_index]
                 base_img = Image.open(img_path).resize((240, 240))
-
-                # 在原图上绘制索引 (未旋转)
                 draw = ImageDraw.Draw(base_img)
                 font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-
-                # 显示时统一旋转
                 disp.ShowImage(base_img.rotate(270))
 
         elif mode == MODE_DELETE_CONFIRM:
-            # 删除确认界面
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
             draw = ImageDraw.Draw(confirm_img)
             font = ImageFont.truetype(FONT_PATH, 20)
@@ -202,7 +257,7 @@ try:
                 draw.text((80, 100 + i * 40), opt, font=font, fill=color)
             disp.ShowImage(confirm_img.rotate(270))
 
-        # ---------- 按键检测 ----------
+        # ---------- 按键变量 ----------
         center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
         key_gallery = disp.digital_read(disp.GPIO_KEY2_PIN) == 1
         key_delete = disp.digital_read(disp.GPIO_KEY3_PIN) == 1
@@ -217,21 +272,16 @@ try:
             infer_ms, cls, score = run_inference(img_pil)
             pred_name = idx_to_name.get(cls, f"Class {cls}")
 
-            # 自动换行识别结果
             text = f"{pred_name} ({score * 100:.1f}%)"
-            wrapped = textwrap.wrap(text, width=18)[:2]  # 每行最多18字符，两行
+            wrapped = textwrap.wrap(text, width=18)[:2]
 
-            # 在原始方向的图像上绘制推理结果
             draw = ImageDraw.Draw(img_pil)
             font = ImageFont.truetype(FONT_PATH, 18)
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
 
-            # 保存未旋转原图
             save_history_image(img_pil)
-
-            # 显示时旋转
             captured_image = img_pil.rotate(270)
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
@@ -269,10 +319,10 @@ try:
         # ====== 删除确认处理 ======
         elif mode == MODE_DELETE_CONFIRM:
             if key_up or key_down:
-                delete_selection = 1 - delete_selection  # 切换选择
+                delete_selection = 1 - delete_selection
                 time.sleep(0.2)
             elif center_pressed:
-                if delete_selection == 0:  # 确认删除
+                if delete_selection == 0:
                     os.remove(gallery_files[gallery_index])
                     del gallery_files[gallery_index]
                     if gallery_files:
@@ -281,7 +331,7 @@ try:
                     else:
                         mode = MODE_PREVIEW
                     logging.info("图片已删除")
-                else:  # 取消
+                else:
                     mode = MODE_GALLERY
                 time.sleep(0.2)
 
