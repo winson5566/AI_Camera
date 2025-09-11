@@ -167,36 +167,29 @@ try:
     while True:
         # ---------- 不同模式的显示 ----------
         if mode == MODE_PREVIEW:
+            # 实时预览：摄像头图像直接旋转后显示
             frame = picam2.capture_array()
-            img_pil = Image.fromarray(frame).rotate(270)
-            disp.ShowImage(img_pil)
+            img_pil = Image.fromarray(frame)
+            disp.ShowImage(img_pil.rotate(270))
 
         elif mode == MODE_RESULT:
             if captured_image:
                 disp.ShowImage(captured_image)
 
-
         elif mode == MODE_GALLERY:
-
             if gallery_files:
-                # 打开图片并调整大小
                 img_path = gallery_files[gallery_index]
                 base_img = Image.open(img_path).resize((240, 240))
 
-                # 创建新的画布，在上面绘制索引
+                # 在原图上绘制索引
                 draw = ImageDraw.Draw(base_img)
                 font = ImageFont.truetype(FONT_PATH, 16)
-
-                # 在未旋转的原始方向绘制 (当前/总数)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
 
-                # 最后整体旋转 270 度
-                final_img = base_img.rotate(270)
-
-                # 显示到屏幕
-                disp.ShowImage(final_img)
+                # 统一旋转后显示
+                disp.ShowImage(base_img.rotate(270))
 
         elif mode == MODE_DELETE_CONFIRM:
             # 删除确认界面
@@ -228,14 +221,15 @@ try:
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]  # 每行最多18字符，两行
 
-            img_draw = img_pil.rotate(-270)
-            draw = ImageDraw.Draw(img_draw)
+            # 在原图上绘制识别结果
+            draw = ImageDraw.Draw(img_pil)
             font = ImageFont.truetype(FONT_PATH, 18)
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
-            img_final = img_draw.rotate(270)
 
+            # 最后统一旋转后显示
+            img_final = img_pil.rotate(270)
             save_history_image(img_final)
             captured_image = img_final.copy()
             mode = MODE_RESULT
