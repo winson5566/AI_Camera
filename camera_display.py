@@ -230,7 +230,7 @@ try:
         if mode == MODE_PREVIEW:
             frame = picam2.capture_array()
             img_pil = Image.fromarray(frame)
-            disp.ShowImage(img_pil.rotate(270))
+            disp.ShowImage(img_pil.rotate(180))
 
         elif mode == MODE_RESULT:
             if captured_image:
