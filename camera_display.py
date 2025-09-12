@@ -245,7 +245,7 @@ try:
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-                disp.ShowImage(base_img.rotate(270))
+                disp.ShowImage(base_img.rotate(0))
 
         elif mode == MODE_DELETE_CONFIRM:
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
@@ -255,7 +255,7 @@ try:
             for i, opt in enumerate(options):
                 color = (255, 0, 0) if i == delete_selection else (255, 255, 255)
                 draw.text((80, 100 + i * 40), opt, font=font, fill=color)
-            disp.ShowImage(confirm_img.rotate(270))
+            disp.ShowImage(confirm_img.rotate(0))
 
         # ---------- 按键变量 ----------
         center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
