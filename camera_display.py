@@ -18,16 +18,13 @@ except ImportError:
 # ----------------- 配置 -----------------
 MODEL_PATH = "model/model_efficientnet_b0_inat2021_drq.tflite"
 CATEGORIES_JSON = "inat2021/categories.json"
-HISTORY_DIR = "/home/winson/AI_Camera/history"  # 历史照片存储路径
+HISTORY_DIR = "/home/winson/AI_Camera/history"
 TOP_K = 1
 CENTER_CROP = True
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
-# 休眠超时时间（秒）
 SLEEP_TIMEOUT = 60
-DEFAULT_BRIGHTNESS = 50  # 正常工作时背光亮度 (0-100)
-
-# ---------------------------------------
+DEFAULT_BRIGHTNESS = 50
+ROTATE_ANGLE = 270  # 根据你摄像头的安装方向设置（逆时针旋转）
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,7 +50,6 @@ logging.info(f"Model loaded. Input size: {input_size}x{input_size}, {len(idx_to_
 
 # ---------- 工具函数 ----------
 def fix_to_uint8(x_np: np.ndarray) -> np.ndarray:
-    """确保图片数据为uint8格式"""
     if x_np.dtype.kind == 'f':
         if float(x_np.max()) <= 1.0 and float(x_np.min()) >= 0.0:
             x_np = np.round(x_np * 255.0)
@@ -63,14 +59,12 @@ def fix_to_uint8(x_np: np.ndarray) -> np.ndarray:
     return x_np
 
 def prepare_input(interpreter, img_pil: Image.Image):
-    """将拍照得到的PIL图像设置到模型输入"""
     if CENTER_CROP:
         w, h = img_pil.size
         s = min(w, h)
         left = (w - s) // 2
         top = (h - s) // 2
         img_pil = img_pil.crop((left, top, left + s, top + s))
-
     img_pil = img_pil.resize((input_size, input_size), Image.BILINEAR)
     arr = np.asarray(img_pil)
     arr = fix_to_uint8(arr)
@@ -98,7 +92,6 @@ def prepare_input(interpreter, img_pil: Image.Image):
     interpreter.set_tensor(in_index, x_for_model)
 
 def maybe_dequantize_output(y):
-    """输出反量化"""
     y = y.astype(np.float32, copy=False)
     scale, zero_point = output_details.get('quantization', (None, None))
     if scale not in (None, 0.0):
@@ -106,24 +99,20 @@ def maybe_dequantize_output(y):
     return y
 
 def run_inference(img_pil):
-    """对拍照的PIL图像进行推理"""
     prepare_input(interpreter, img_pil)
     t0 = time.perf_counter()
     interpreter.invoke()
     t1 = time.perf_counter()
     infer_ms = (t1 - t0) * 1000.0
-
     y = interpreter.get_tensor(output_details['index'])
     if y.ndim == 2 and y.shape[0] == 1:
         y = y[0]
     y = maybe_dequantize_output(y)
-
     cls = int(np.argmax(y))
     score = float(y[cls])
     return infer_ms, cls, score
 
 def save_history_image(img_pil):
-    """保存图片到history文件夹 (保持原始未旋转方向)"""
     os.makedirs(HISTORY_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}.jpg"
@@ -133,7 +122,6 @@ def save_history_image(img_pil):
     return path
 
 def load_history_images():
-    """加载history文件夹中的图片列表"""
     if not os.path.exists(HISTORY_DIR):
         return []
     files = sorted([f for f in os.listdir(HISTORY_DIR) if f.lower().endswith(".jpg")])
@@ -160,21 +148,18 @@ MODE_PREVIEW = 0
 MODE_RESULT = 1
 MODE_GALLERY = 2
 MODE_DELETE_CONFIRM = 3
-MODE_SLEEP = 4  # 新增休眠模式
+MODE_SLEEP = 4
 
 mode = MODE_PREVIEW
 captured_image = None
 gallery_index = 0
 gallery_files = []
 delete_selection = 0
-sleeping = False  # 是否处于休眠状态
-
-# 上次按键时间
+sleeping = False
 last_active = time.time()
 
 # ---------- 按键检测函数 ----------
 def check_any_key():
-    """检测是否有任意按键被按下"""
     return (
         disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or
         disp.digital_read(disp.GPIO_KEY1_PIN) == 1 or
@@ -186,16 +171,14 @@ def check_any_key():
         disp.digital_read(disp.GPIO_KEY_RIGHT_PIN) == 1
     )
 
-# ---------- 进入休眠 ----------
 def enter_sleep():
     global sleeping, mode
     picam2.stop()
-    disp.bl_DutyCycle(0)  # 关闭背光
+    disp.bl_DutyCycle(0)
     sleeping = True
     mode = MODE_SLEEP
     logging.info("进入休眠模式")
 
-# ---------- 唤醒 ----------
 def wake_up():
     global sleeping, mode
     picam2.start()
@@ -208,29 +191,22 @@ def wake_up():
 try:
     while True:
         now = time.time()
-
-        # 检测是否有按键输入
         if check_any_key():
             last_active = now
             if sleeping:
                 wake_up()
-                time.sleep(0.3)  # 防止误触发
+                time.sleep(0.3)
                 continue
-
-        # 超时进入休眠
         if not sleeping and (now - last_active > SLEEP_TIMEOUT):
             enter_sleep()
-
-        # 如果处于休眠状态，则跳过其他逻辑
         if sleeping:
             time.sleep(0.2)
             continue
 
-        # ---------- 不同模式的显示 ----------
         if mode == MODE_PREVIEW:
             frame = picam2.capture_array()
             img_pil = Image.fromarray(frame)
-            disp.ShowImage(img_pil.rotate(0))
+            disp.ShowImage(img_pil.rotate(ROTATE_ANGLE))
 
         elif mode == MODE_RESULT:
             if captured_image:
@@ -239,13 +215,13 @@ try:
         elif mode == MODE_GALLERY:
             if gallery_files:
                 img_path = gallery_files[gallery_index]
-                base_img = Image.open(img_path).resize((240, 240))
+                base_img = Image.open(img_path).resize((240, 240)).rotate(ROTATE_ANGLE)
                 draw = ImageDraw.Draw(base_img)
                 font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-                disp.ShowImage(base_img.rotate(0))
+                disp.ShowImage(base_img)
 
         elif mode == MODE_DELETE_CONFIRM:
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
@@ -255,9 +231,8 @@ try:
             for i, opt in enumerate(options):
                 color = (255, 0, 0) if i == delete_selection else (255, 255, 255)
                 draw.text((80, 100 + i * 40), opt, font=font, fill=color)
-            disp.ShowImage(confirm_img.rotate(0))
+            disp.ShowImage(confirm_img.rotate(ROTATE_ANGLE))
 
-        # ---------- 按键变量 ----------
         center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
         key_gallery = disp.digital_read(disp.GPIO_KEY2_PIN) == 1
         key_delete = disp.digital_read(disp.GPIO_KEY3_PIN) == 1
@@ -266,32 +241,29 @@ try:
         key_left = disp.digital_read(disp.GPIO_KEY_LEFT_PIN) == 1
         key_right = disp.digital_read(disp.GPIO_KEY_RIGHT_PIN) == 1
 
-        # ====== 拍照推理 ======
         if center_pressed and mode == MODE_PREVIEW:
             time.sleep(0.2)
             infer_ms, cls, score = run_inference(img_pil)
             pred_name = idx_to_name.get(cls, f"Class {cls}")
-
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]
 
-            draw = ImageDraw.Draw(img_pil)
+            rotated_img = img_pil.rotate(ROTATE_ANGLE)
+            draw = ImageDraw.Draw(rotated_img)
             font = ImageFont.truetype(FONT_PATH, 18)
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
 
             save_history_image(img_pil)
-            captured_image = img_pil.rotate(0)
+            captured_image = rotated_img
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
-        # ====== 从拍照结果返回预览 ======
         elif center_pressed and mode == MODE_RESULT:
             time.sleep(0.2)
             mode = MODE_PREVIEW
 
-        # ====== 进入相册模式 ======
         elif key_gallery and mode != MODE_GALLERY:
             time.sleep(0.2)
             gallery_files = load_history_images()
@@ -300,7 +272,6 @@ try:
                 mode = MODE_GALLERY
                 logging.info("进入相册模式")
 
-        # ====== 相册浏览 ======
         elif mode == MODE_GALLERY:
             if key_up or key_left:
                 time.sleep(0.2)
@@ -316,7 +287,6 @@ try:
                 time.sleep(0.2)
                 mode = MODE_PREVIEW
 
-        # ====== 删除确认处理 ======
         elif mode == MODE_DELETE_CONFIRM:
             if key_up or key_down:
                 delete_selection = 1 - delete_selection
@@ -337,7 +307,6 @@ try:
 
 except KeyboardInterrupt:
     logging.info("用户手动退出程序")
-
 finally:
     picam2.stop()
     disp.clear()
