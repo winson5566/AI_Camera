@@ -237,26 +237,46 @@ try:
                 disp.ShowImage(captured_image)
 
 
+
         elif mode == MODE_GALLERY:
 
             if gallery_files:
                 img_path = gallery_files[gallery_index]
-                # 1. 打开当前相册图片，保持正常方向
+                # 1. 打开当前相册图片
                 base_img = Image.open(img_path).resize((240, 240)).convert("RGBA")
-                # 2. 创建透明 overlay 图层，用于绘制页码文字
+
+                # 2. 对当前照片进行推理
+                infer_ms, cls, score = run_inference(base_img.convert("RGB"))
+                pred_name = idx_to_name.get(cls, f"Class {cls}")
+                text = f"{pred_name} ({score * 100:.1f}%)"
+                wrapped = textwrap.wrap(text, width=18)[:2]
+
+                # 3. 创建透明 overlay，用于叠加页码和推理结果
                 overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
                 draw = ImageDraw.Draw(overlay)
-                # 3. 绘制黑色背景和页码文字
-                font = ImageFont.truetype(FONT_PATH, 16)
+
+                # --- 页码显示 ---
+                font_page = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0, 255))
-                draw.text((10, 2), index_text, font=font, fill=(255, 255, 255, 255))
-                # 4. 旋转 overlay，让文字方向正确
+                draw.text((10, 2), index_text, font=font_page, fill=(255, 255, 255, 255))
+
+                # --- 推理结果显示 ---
+                font_pred = ImageFont.truetype(FONT_PATH, 18)
+                draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0, 255))
+                for i, line in enumerate(wrapped):
+                    draw.text((10, 200 + i * 20), line, font=font_pred, fill=(255, 255, 255, 255))
+
+                # 4. 旋转 overlay 以保证方向正确
                 overlay = overlay.transpose(Image.ROTATE_270)
-                # 5. 合成 overlay 和原始图片
+
+                # 5. 合成最终图像
                 img_with_text = Image.alpha_composite(base_img, overlay)
-                # 6. 显示最终结果
+
+                # 6. 显示结果
                 disp.ShowImage(img_with_text.convert("RGB"))
+                logging.info(f"相册推理结果: {text} | Time: {infer_ms:.2f} ms")
+
 
 
         elif mode == MODE_DELETE_CONFIRM:
