@@ -122,7 +122,7 @@ def run_inference(img_pil):
     return infer_ms, cls, score
 
 def save_history_image(img_pil):
-    """保存图片到history文件夹 (保持原始未旋转方向)"""
+    """保存图片到history文件夹"""
     os.makedirs(HISTORY_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}.jpg"
@@ -168,8 +168,13 @@ gallery_files = []
 delete_selection = 0
 sleeping = False  # 是否处于休眠状态
 
-# 上次按键时间
+# 上次活跃时间
 last_active = time.time()
+
+# ---------- 刷新活跃时间 ----------
+def bump_activity():
+    global last_active
+    last_active = time.time()
 
 # ---------- 按键检测函数 ----------
 def check_any_key():
@@ -201,6 +206,7 @@ def wake_up():
     disp.bl_DutyCycle(DEFAULT_BRIGHTNESS)
     sleeping = False
     mode = MODE_PREVIEW
+    bump_activity()  # 唤醒后立即刷新活跃时间
     logging.info("唤醒设备")
 
 # ---------- 主循环 ----------
@@ -210,15 +216,10 @@ try:
 
         # 检测是否有按键输入
         if check_any_key():
-            last_active = now
             if sleeping:
                 wake_up()
                 time.sleep(0.3)  # 防止误触发
                 continue
-
-        # 超时进入休眠
-        if not sleeping and (now - last_active > SLEEP_TIMEOUT):
-            enter_sleep()
 
         # 如果处于休眠状态，则跳过其他逻辑
         if sleeping:
@@ -238,18 +239,14 @@ try:
         elif mode == MODE_GALLERY:
             if gallery_files:
                 img_path = gallery_files[gallery_index]
-                # 打开历史图片
                 base_img = Image.open(img_path).resize((240, 240)).convert("RGBA")
-                # 创建透明 overlay 显示页码
                 overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
                 draw = ImageDraw.Draw(overlay)
                 font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0, 255))
                 draw.text((10, 2), index_text, font=font, fill=(255, 255, 255, 255))
-                # 旋转 overlay 文字
                 overlay = overlay.transpose(Image.ROTATE_270)
-                # 合成并显示
                 img_with_text = Image.alpha_composite(base_img, overlay)
                 disp.ShowImage(img_with_text.convert("RGB"))
 
@@ -274,14 +271,14 @@ try:
 
         # ====== 拍照推理 ======
         if center_pressed and mode == MODE_PREVIEW:
+            bump_activity()
             time.sleep(0.2)
             infer_ms, cls, score = run_inference(img_pil)
             pred_name = idx_to_name.get(cls, f"Class {cls}")
-
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]
 
-            # 1. 创建透明 overlay 绘制推理结果
+            # 创建透明 overlay 绘制推理结果
             overlay = Image.new("RGBA", img_pil.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
             font = ImageFont.truetype(FONT_PATH, 18)
@@ -289,56 +286,59 @@ try:
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255, 255))
 
-            # 2. 只旋转 overlay
             overlay = overlay.transpose(Image.ROTATE_270)
-
-            # 3. 合成最终推理结果
             img_with_text = Image.alpha_composite(img_pil.convert("RGBA"), overlay).convert("RGB")
 
-            # 4. 保存带推理结果的成品图
             save_history_image(img_with_text)
-
-            # 5. 显示在屏幕上
             captured_image = img_with_text
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
         # ====== 从拍照结果返回预览 ======
         elif center_pressed and mode == MODE_RESULT:
+            bump_activity()
             time.sleep(0.2)
             mode = MODE_PREVIEW
 
         # ====== 进入相册模式 ======
         elif key_gallery and mode != MODE_GALLERY:
+            bump_activity()
             time.sleep(0.2)
             gallery_files = load_history_images()
             if gallery_files:
                 gallery_index = len(gallery_files) - 1
                 mode = MODE_GALLERY
+                bump_activity()
                 logging.info("进入相册模式")
 
         # ====== 相册浏览 ======
         elif mode == MODE_GALLERY:
             if key_up or key_left:
+                bump_activity()
                 time.sleep(0.2)
                 gallery_index = (gallery_index - 1) % len(gallery_files)
             elif key_down or key_right:
+                bump_activity()
                 time.sleep(0.2)
                 gallery_index = (gallery_index + 1) % len(gallery_files)
             elif key_delete:
+                bump_activity()
                 time.sleep(0.2)
                 mode = MODE_DELETE_CONFIRM
                 delete_selection = 0
             elif center_pressed:
+                bump_activity()
                 time.sleep(0.2)
                 mode = MODE_PREVIEW
 
         # ====== 删除确认处理 ======
         elif mode == MODE_DELETE_CONFIRM:
             if key_up or key_down:
+                bump_activity()
                 delete_selection = 1 - delete_selection
                 time.sleep(0.2)
             elif center_pressed:
+                bump_activity()
                 if delete_selection == 0:
                     os.remove(gallery_files[gallery_index])
                     del gallery_files[gallery_index]
@@ -351,6 +351,10 @@ try:
                 else:
                     mode = MODE_GALLERY
                 time.sleep(0.2)
+
+        # ---------- 休眠逻辑放在末尾 ----------
+        if not sleeping and (time.time() - last_active > SLEEP_TIMEOUT):
+            enter_sleep()
 
 except KeyboardInterrupt:
     logging.info("用户手动退出程序")
