@@ -28,7 +28,6 @@ SLEEP_TIMEOUT = 60
 DEFAULT_BRIGHTNESS = 50  # 正常工作时背光亮度 (0-100)
 
 # ---------------------------------------
-
 logging.basicConfig(level=logging.INFO)
 
 # ---------- 加载类别 ----------
@@ -236,48 +235,23 @@ try:
             if captured_image:
                 disp.ShowImage(captured_image)
 
-
-
         elif mode == MODE_GALLERY:
-
             if gallery_files:
                 img_path = gallery_files[gallery_index]
-                # 1. 打开当前相册图片
+                # 打开历史图片
                 base_img = Image.open(img_path).resize((240, 240)).convert("RGBA")
-
-                # 2. 对当前照片进行推理
-                infer_ms, cls, score = run_inference(base_img.convert("RGB"))
-                pred_name = idx_to_name.get(cls, f"Class {cls}")
-                text = f"{pred_name} ({score * 100:.1f}%)"
-                wrapped = textwrap.wrap(text, width=18)[:2]
-
-                # 3. 创建透明 overlay，用于叠加页码和推理结果
+                # 创建透明 overlay 显示页码
                 overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
                 draw = ImageDraw.Draw(overlay)
-
-                # --- 页码显示 ---
-                font_page = ImageFont.truetype(FONT_PATH, 16)
+                font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
                 draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0, 255))
-                draw.text((10, 2), index_text, font=font_page, fill=(255, 255, 255, 255))
-
-                # --- 推理结果显示 ---
-                font_pred = ImageFont.truetype(FONT_PATH, 18)
-                draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0, 255))
-                for i, line in enumerate(wrapped):
-                    draw.text((10, 200 + i * 20), line, font=font_pred, fill=(255, 255, 255, 255))
-
-                # 4. 旋转 overlay 以保证方向正确
+                draw.text((10, 2), index_text, font=font, fill=(255, 255, 255, 255))
+                # 旋转 overlay 文字
                 overlay = overlay.transpose(Image.ROTATE_270)
-
-                # 5. 合成最终图像
+                # 合成并显示
                 img_with_text = Image.alpha_composite(base_img, overlay)
-
-                # 6. 显示结果
                 disp.ShowImage(img_with_text.convert("RGB"))
-                logging.info(f"相册推理结果: {text} | Time: {infer_ms:.2f} ms")
-
-
 
         elif mode == MODE_DELETE_CONFIRM:
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
@@ -307,27 +281,25 @@ try:
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]
 
-            # 1. 保存原始照片，不旋转
-            save_history_image(img_pil)
-
-            # 2. 创建透明的文字层
+            # 1. 创建透明 overlay 绘制推理结果
             overlay = Image.new("RGBA", img_pil.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
-
-            # 3. 在 overlay 上绘制黑色背景条和文字
             font = ImageFont.truetype(FONT_PATH, 18)
             draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0, 255))
             for i, line in enumerate(wrapped):
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255, 255))
 
-            # 4. 只旋转 overlay，不旋转原始照片
+            # 2. 只旋转 overlay
             overlay = overlay.transpose(Image.ROTATE_270)
 
-            # 5. 将 overlay 叠加到照片上
-            img_with_text = Image.alpha_composite(img_pil.convert("RGBA"), overlay)
+            # 3. 合成最终推理结果
+            img_with_text = Image.alpha_composite(img_pil.convert("RGBA"), overlay).convert("RGB")
 
-            # 6. 用于显示的最终结果
-            captured_image = img_with_text.convert("RGB")
+            # 4. 保存带推理结果的成品图
+            save_history_image(img_with_text)
+
+            # 5. 显示在屏幕上
+            captured_image = img_with_text
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
