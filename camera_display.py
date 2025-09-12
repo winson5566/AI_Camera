@@ -282,7 +282,7 @@ try:
                 draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
 
             save_history_image(img_pil)
-            captured_image = img_pil.rotate(270)
+            captured_image = img_pil.rotate(0)
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
