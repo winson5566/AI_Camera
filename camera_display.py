@@ -236,16 +236,28 @@ try:
             if captured_image:
                 disp.ShowImage(captured_image)
 
+
         elif mode == MODE_GALLERY:
+
             if gallery_files:
                 img_path = gallery_files[gallery_index]
-                base_img = Image.open(img_path).resize((240, 240))
-                draw = ImageDraw.Draw(base_img)
+                # 1. 打开当前相册图片，保持正常方向
+                base_img = Image.open(img_path).resize((240, 240)).convert("RGBA")
+                # 2. 创建透明 overlay 图层，用于绘制页码文字
+                overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+                draw = ImageDraw.Draw(overlay)
+                # 3. 绘制黑色背景和页码文字
                 font = ImageFont.truetype(FONT_PATH, 16)
                 index_text = f"({gallery_index + 1}/{len(gallery_files)})"
-                draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0))
-                draw.text((10, 2), index_text, font=font, fill=(255, 255, 255))
-                disp.ShowImage(base_img.rotate(0))
+                draw.rectangle((0, 0, 240, 20), fill=(0, 0, 0, 255))
+                draw.text((10, 2), index_text, font=font, fill=(255, 255, 255, 255))
+                # 4. 旋转 overlay，让文字方向正确
+                overlay = overlay.transpose(Image.ROTATE_270)
+                # 5. 合成 overlay 和原始图片
+                img_with_text = Image.alpha_composite(base_img, overlay)
+                # 6. 显示最终结果
+                disp.ShowImage(img_with_text.convert("RGB"))
+
 
         elif mode == MODE_DELETE_CONFIRM:
             confirm_img = Image.new("RGB", (240, 240), (0, 0, 0))
@@ -255,7 +267,7 @@ try:
             for i, opt in enumerate(options):
                 color = (255, 0, 0) if i == delete_selection else (255, 255, 255)
                 draw.text((80, 100 + i * 40), opt, font=font, fill=color)
-            disp.ShowImage(confirm_img.rotate(0))
+            disp.ShowImage(confirm_img.rotate(270))
 
         # ---------- 按键变量 ----------
         center_pressed = disp.digital_read(disp.GPIO_KEY_PRESS_PIN) == 1 or disp.digital_read(disp.GPIO_KEY1_PIN) == 1
