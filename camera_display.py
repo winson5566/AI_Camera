@@ -275,14 +275,27 @@ try:
             text = f"{pred_name} ({score * 100:.1f}%)"
             wrapped = textwrap.wrap(text, width=18)[:2]
 
-            draw = ImageDraw.Draw(img_pil)
-            font = ImageFont.truetype(FONT_PATH, 18)
-            draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0))
-            for i, line in enumerate(wrapped):
-                draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255))
-
+            # 1. 保存原始照片，不旋转
             save_history_image(img_pil)
-            captured_image = img_pil.rotate(270)
+
+            # 2. 创建透明的文字层
+            overlay = Image.new("RGBA", img_pil.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+
+            # 3. 在 overlay 上绘制黑色背景条和文字
+            font = ImageFont.truetype(FONT_PATH, 18)
+            draw.rectangle((0, 200, 240, 240), fill=(0, 0, 0, 255))
+            for i, line in enumerate(wrapped):
+                draw.text((10, 200 + i * 20), line, font=font, fill=(255, 255, 255, 255))
+
+            # 4. 只旋转 overlay，不旋转原始照片
+            overlay = overlay.transpose(Image.ROTATE_270)
+
+            # 5. 将 overlay 叠加到照片上
+            img_with_text = Image.alpha_composite(img_pil.convert("RGBA"), overlay)
+
+            # 6. 用于显示的最终结果
+            captured_image = img_with_text.convert("RGB")
             mode = MODE_RESULT
             logging.info(f"推理结果: {text} | Time: {infer_ms:.2f} ms")
 
