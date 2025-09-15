@@ -24,10 +24,10 @@ CENTER_CROP = True
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 # 超时时间配置
-SLEEP_TIMEOUT = 30       # 30秒无操作进入休眠
-SHUTDOWN_TIMEOUT = 180   # 180秒（3分钟）无操作自动关机
+SLEEP_TIMEOUT = 60       # 30秒无操作进入休眠
+SHUTDOWN_TIMEOUT = 600   # 180秒（3分钟）无操作自动关机
 
-DEFAULT_BRIGHTNESS = 50  # 正常工作时背光亮度 (0-100)
+DEFAULT_BRIGHTNESS = 100  # 正常工作时背光亮度 (0-100)
 
 # ---------------------------------------
 logging.basicConfig(level=logging.INFO)
