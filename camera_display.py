@@ -23,8 +23,10 @@ TOP_K = 1
 CENTER_CROP = True
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
-# 休眠超时时间（秒）
-SLEEP_TIMEOUT = 60
+# 超时时间配置
+SLEEP_TIMEOUT = 30       # 30秒无操作进入休眠
+SHUTDOWN_TIMEOUT = 180   # 180秒（3分钟）无操作自动关机
+
 DEFAULT_BRIGHTNESS = 50  # 正常工作时背光亮度 (0-100)
 
 # ---------------------------------------
@@ -220,9 +222,15 @@ try:
                 wake_up()
                 time.sleep(0.3)  # 防止误触发
                 continue
+            bump_activity()
 
         # 如果处于休眠状态，则跳过其他逻辑
         if sleeping:
+            # 检查是否需要关机
+            if time.time() - last_active > SHUTDOWN_TIMEOUT:
+                logging.info("长时间无操作，执行自动关机")
+                os.system("sudo shutdown now")
+                break
             time.sleep(0.2)
             continue
 
