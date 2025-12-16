@@ -52,7 +52,23 @@ def load_and_preprocess_image(path, size):
 
 def prepare_input(interpreter, x_np):
     inp = interpreter.get_input_details()[0]
-    interpreter.set_tensor(inp["index"], x_np[None, ...])
+    idx = inp["index"]
+    dtype = inp["dtype"]
+
+    if dtype == np.float32:
+        # DRQ / FP32 模型：输入 float32
+        x = x_np.astype(np.float32)
+        # 可选：如果你训练时是 [0,1]
+        if x.max() > 1.0:
+            x = x / 255.0
+    elif dtype == np.uint8:
+        # 真·INT8 输入模型
+        x = x_np.astype(np.uint8)
+    else:
+        raise ValueError(f"Unsupported input dtype: {dtype}")
+
+    interpreter.set_tensor(idx, x[None, ...])
+
 
 
 def maybe_dequantize(output_details, y):
