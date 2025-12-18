@@ -16,7 +16,7 @@ except ImportError:
     from tensorflow.lite.python.interpreter import Interpreter
 
 # ----------------- 配置 -----------------
-MODEL_PATH = "model/model_efficientnet_b0_inat2021_drq.tflite"
+MODEL_PATH = "model/model_efficientnet_b0_inat2021_fp32.tflite"
 CATEGORIES_JSON = "inat2021/categories.json"
 HISTORY_DIR = "/home/winson/AI_Camera/history"  # 历史照片存储路径
 TOP_K = 1
